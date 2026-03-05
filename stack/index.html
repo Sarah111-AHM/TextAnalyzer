@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Text Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--surface:#13161d;--surface2:#1a1e28;--border:#252933;
+  --text:#e8eaf0;--muted:#6b7280;
+  --accent:#4ade80;--accent2:#60a5fa;--accent3:#f472b6;
+  --red:#f87171;--green:#4ade80;--yellow:#fbbf24;
+  --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column}
+
+/* ── Header ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{font-family:var(--mono);font-size:20px;color:var(--accent);background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.2);padding:6px 10px;border-radius:6px}
+.logo h1{font-size:18px;font-weight:600}
+.logo p{font-size:11px;color:var(--muted);margin-top:2px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:11px;font-family:var(--mono);background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.25);color:var(--accent2);padding:3px 10px;border-radius:20px}
+
+/* ── Layout ── */
+.layout{display:flex;flex:1}
+
+/* ── Sidebar ── */
+nav{width:195px;min-width:195px;background:var(--surface);border-right:1px solid var(--border);padding:14px 10px;display:flex;flex-direction:column;gap:18px}
+.nav-group{display:flex;flex-direction:column;gap:3px}
+.nav-lbl{font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;padding:0 8px;margin-bottom:4px}
+.nav-btn{background:none;border:none;color:var(--text);text-align:left;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:13px;font-family:var(--sans);transition:all .15s;width:100%}
+.nav-btn:hover:not(.off){background:var(--surface2)}
+.nav-btn.active{background:rgba(74,222,128,.12);color:var(--accent);font-weight:500}
+.nav-btn.off{color:var(--muted);cursor:not-allowed;opacity:.45}
+
+/* ── Panel ── */
+main{flex:1;padding:26px 30px;overflow-y:auto}
+.section{max-width:680px}
+.section h2{font-size:20px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.desc{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:18px}
+
+/* ── Inputs ── */
+textarea{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:12px;border-radius:8px;font-family:var(--mono);font-size:13px;resize:vertical;outline:none;margin-bottom:14px;transition:border-color .15s}
+textarea:focus{border-color:var(--accent)}
+.row{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+input[type=text],input[type=number]{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:6px;font-size:13px;font-family:var(--sans);outline:none}
+input[type=text]{flex:1;min-width:150px}
+input[type=number]{width:70px;text-align:center}
+input:focus{border-color:var(--accent)}
+.file-zone{border:2px dashed var(--border);border-radius:8px;padding:22px;text-align:center;cursor:pointer;color:var(--muted);font-size:14px;margin-bottom:12px;transition:all .15s;display:flex;flex-direction:column;gap:6px}
+.file-zone:hover{border-color:var(--accent);color:var(--text)}
+.toggle-row{display:flex;gap:8px;margin-bottom:16px}
+.toggle{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:7px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-family:var(--sans);transition:all .15s}
+.toggle.on{background:rgba(74,222,128,.12);border-color:rgba(74,222,128,.3);color:var(--accent)}
+
+/* ── Buttons ── */
+.btn{background:var(--accent);color:#0d0f14;padding:9px 20px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:opacity .15s;white-space:nowrap}
+.btn:hover{opacity:.85}
+.btn-sec{background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:9px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-family:var(--sans)}
+.btn-sec:disabled{opacity:.35;cursor:not-allowed}
+.btn-row{display:flex;gap:10px;margin-bottom:14px}
+.ok{color:var(--green);font-size:14px;margin-top:10px}
+
+/* ── Result box ── */
+.result{margin-top:18px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px}
+.result-meta{font-size:13px;color:var(--muted);margin-bottom:12px}
+.empty{color:var(--muted);font-size:14px}
+
+/* ── Cards ── */
+.cards{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 18px;display:flex;flex-direction:column;gap:4px}
+.card-num{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--accent)}
+.card span:last-child{font-size:12px;color:var(--muted)}
+
+/* ── Bar chart ── */
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar-row{display:flex;align-items:center;gap:10px}
+.bar-word{font-family:var(--mono);font-size:12px;min-width:100px;color:var(--text)}
+.bar-track{flex:1;height:7px;background:var(--bg);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;background:var(--accent2);border-radius:4px;transition:width .4s}
+.bar-fill.g{background:var(--accent)}
+.bar-cnt{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:28px;text-align:right}
+
+/* ── Char grid ── */
+.char-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:7px}
+.char-cell{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 5px;text-align:center}
+.char-lbl{display:block;font-family:var(--mono);font-size:17px;color:var(--accent3)}
+.char-cnt{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+
+/* ── Search results ── */
+.s-results{display:flex;flex-direction:column;gap:9px}
+.s-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge{font-size:11px;font-family:var(--mono);background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);color:var(--accent2);padding:3px 7px;border-radius:4px;white-space:nowrap}
+.ctx{font-size:12px;color:var(--muted);font-family:var(--mono)}
+
+/* ── Autocomplete chips ── */
+.chips{display:flex;flex-wrap:wrap;gap:9px}
+.chip{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 11px;font-family:var(--mono);font-size:13px;display:flex;align-items:center;gap:3px}
+.chip-p{color:var(--accent);font-weight:700}
+.chip-f{margin-left:7px;font-size:10px;color:var(--muted);background:var(--surface);padding:2px 5px;border-radius:10px}
+
+/* ── Predict ── */
+.preds{display:flex;flex-direction:column;gap:9px}
+.pred-row{display:flex;align-items:center;gap:12px}
+.pred-rank{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:22px}
+.pred-word{font-family:var(--mono);font-size:14px;min-width:100px}
+.prob-track{flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
+.prob-fill{height:100%;background:var(--accent3);border-radius:3px}
+.pred-pct{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:44px;text-align:right}
+
+/* ── Sentiment ── */
+.verdict{display:flex;align-items:center;gap:14px;padding:18px;border-radius:8px;margin-bottom:14px}
+.verdict.positive{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.25)}
+.verdict.negative{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25)}
+.verdict.neutral {background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25)}
+.v-emoji{font-size:38px}
+.v-label{font-family:var(--mono);font-size:22px;font-weight:700}
+.positive .v-label{color:var(--green)}
+.negative .v-label{color:var(--red)}
+.neutral  .v-label{color:var(--yellow)}
+.sent-scores{display:flex;gap:10px}
+.sc{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center}
+.sc span{font-size:13px;color:var(--muted)}
+.sc strong{font-family:var(--mono);font-size:20px}
+.sc.p strong{color:var(--green)}
+.sc.n strong{color:var(--red)}
+
+/* ── DS badge ── */
+.ds{font-size:10px;font-family:var(--mono);background:rgba(244,114,182,.1);border:1px solid rgba(244,114,182,.25);color:var(--accent3);padding:3px 7px;border-radius:4px;font-weight:400}
+
+/* ── Loader ── */
+.loader{display:none;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-left:10px}
+.loader.show{display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:600px){nav{display:none}.layout{flex-direction:column}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-icon">⟨/⟩</span>
+    <div>
+      <h1>Smart Text Analyzer</h1>
+      <p>Data Structures in Action</p>
+    </div>
+  </div>
+  <div class="pills" id="headerPills" style="display:none">
+    <span class="pill" id="pillWords"></span>
+    <span class="pill" id="pillUnique"></span>
+    <span class="pill" id="pillSents"></span>
+  </div>
+</header>
+
+<div class="layout">
+  <nav>
+    <div class="nav-group">
+      <div class="nav-lbl">SETUP</div>
+      <button class="nav-btn active" onclick="show('load')">📂 Load Text</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-lbl">CORE FEATURES</div>
+      <button class="nav-btn off" id="nb-word-stats"   onclick="show('word-stats')">📊 Word Stats</button>
+      <button class="nav-btn off" id="nb-char-stats"   onclick="show('char-stats')">🔤 Char Stats</button>
+      <button class="nav-btn off" id="nb-search"       onclick="show('search')">🔍 Search</button>
+      <button class="nav-btn off" id="nb-replace"      onclick="show('replace')">✏️ Replace</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-lbl">AI FEATURES</div>
+      <button class="nav-btn off" id="nb-autocomplete" onclick="show('autocomplete')">⚡ Autocomplete</button>
+      <button class="nav-btn off" id="nb-predict"      onclick="show('predict')">🔮 Predict</button>
+      <button class="nav-btn off" id="nb-sentiment"    onclick="show('sentiment')">😊 Sentiment</button>
+      <button class="nav-btn off" id="nb-keywords"     onclick="show('keywords')">🏷️ Keywords</button>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- LOAD -->
+    <div class="section" id="sec-load">
+      <h2>Load Text</h2>
+      <div class="toggle-row">
+        <button class="toggle on" id="tg-direct" onclick="setMode('direct')">Direct Input</button>
+        <button class="toggle"    id="tg-file"   onclick="setMode('file')">Upload File</button>
+      </div>
+      <div id="file-zone-wrap" style="display:none">
+        <div class="file-zone" onclick="document.getElementById('fileInput').click()">
+          📁 Click to upload a .txt file
+          <small id="file-ok" style="color:var(--green);display:none">File loaded ✓</small>
+        </div>
+        <input type="file" id="fileInput" accept=".txt" style="display:none" onchange="loadFile(event)"/>
+      </div>
+      <textarea id="textInput" rows="10" placeholder="Paste or type your text here..."></textarea>
+      <button class="btn" onclick="loadText()">Analyze Text →</button>
+      <span class="loader" id="loadLoader"></span>
+      <p class="ok" id="loadOk" style="display:none"></p>
+    </div>
+
+    <!-- WORD STATS -->
+    <div class="section" id="sec-word-stats" style="display:none">
+      <h2>📊 Word Statistics</h2>
+      <div class="row">
+        <label>Top N words:</label>
+        <input type="number" id="topN" value="10" min="1" max="100"/>
+        <button class="btn" onclick="runWordStats()">Run</button>
+        <span class="loader" id="wsLoader"></span>
+      </div>
+      <div class="result" id="wsResult" style="display:none"></div>
+    </div>
+
+    <!-- CHAR STATS -->
+    <div class="section" id="sec-char-stats" style="display:none">
+      <h2>🔤 Character Statistics</h2>
+      <button class="btn" onclick="runCharStats()">Run</button>
+      <span class="loader" id="csLoader"></span>
+      <div class="result" id="csResult" style="display:none"></div>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="section" id="sec-search" style="display:none">
+      <h2>🔍 Search Word / Phrase</h2>
+      <div class="row">
+        <input type="text" id="searchQ" placeholder="Enter word or phrase..."/>
+        <button class="btn" onclick="runSearch()">Search</button>
+        <span class="loader" id="srLoader"></span>
+      </div>
+      <div class="result" id="srResult" style="display:none"></div>
+    </div>
+
+    <!-- REPLACE -->
+    <div class="section" id="sec-replace" style="display:none">
+      <h2>✏️ Word Replacement</h2>
+      <div class="row">
+        <input type="text" id="replaceOld" placeholder="Word to replace..."/>
+        <input type="text" id="replaceNew" placeholder="Replace with..."/>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="runReplace()">Replace All</button>
+        <button class="btn-sec" id="undoBtn" onclick="runUndo()" disabled>↩️ Undo</button>
+        <span class="loader" id="rpLoader"></span>
+      </div>
+      <p class="ok" id="rpOk" style="display:none"></p>
+    </div>
+
+    <!-- AUTOCOMPLETE -->
+    <div class="section" id="sec-autocomplete" style="display:none">
+      <h2>⚡ Autocomplete <span class="ds">Trie</span></h2>
+      <p class="desc">Prefix Trie — O(k) lookup per character</p>
+      <div class="row">
+        <input type="text" id="acPrefix" placeholder="Type a prefix (e.g. 'dat')..." oninput="runAutocomplete()"/>
+      </div>
+      <div class="result" id="acResult" style="display:none"></div>
+    </div>
+
+    <!-- PREDICT -->
+    <div class="section" id="sec-predict" style="display:none">
+      <h2>🔮 Next-Word Prediction <span class="ds">Bigrams</span></h2>
+      <p class="desc">Dict of dicts — maps each word to its probable successors</p>
+      <div class="row">
+        <input type="text" id="predictWord" placeholder="Enter a word..."/>
+        <button class="btn" onclick="runPredict()">Predict</button>
+        <span class="loader" id="prLoader"></span>
+      </div>
+      <div class="result" id="prResult" style="display:none"></div>
+    </div>
+
+    <!-- SENTIMENT -->
+    <div class="section" id="sec-sentiment" style="display:none">
+      <h2>😊 Sentiment Analysis <span class="ds">Sets</span></h2>
+      <p class="desc">Positive/Negative word Sets with negation handling</p>
+      <textarea id="sentInput" rows="4" placeholder="Enter a sentence to analyze..."></textarea>
+      <button class="btn" onclick="runSentiment()">Analyze</button>
+      <span class="loader" id="stLoader"></span>
+      <div class="result" id="stResult" style="display:none"></div>
+    </div>
+
+    <!-- KEYWORDS -->
+    <div class="section" id="sec-keywords" style="display:none">
+      <h2>🏷️ Keyword Extraction <span class="ds">Stop-word Set</span></h2>
+      <p class="desc">Filters stop words via Set lookup, ranks by frequency</p>
+      <div class="row">
+        <label>Top N:</label>
+        <input type="number" id="kwTopN" value="10" min="1" max="50"/>
+        <button class="btn" onclick="runKeywords()">Extract</button>
+        <span class="loader" id="kwLoader"></span>
+      </div>
+      <div class="result" id="kwResult" style="display:none"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────
+let currentText = '';
+let undoStack   = [];
+let textLoaded  = false;
+
+// ── Navigation ────────────────────────────────────────
+const SECTIONS = ['load','word-stats','char-stats','search','replace','autocomplete','predict','sentiment','keywords'];
+
+function show(id) {
+  if (id !== 'load' && !textLoaded) return;
+  SECTIONS.forEach(s => {
+    document.getElementById('sec-' + s).style.display = s === id ? '' : 'none';
+    const nb = document.getElementById('nb-' + s);
+    if (nb) nb.classList.toggle('active', s === id);
+  });
+}
+
+// ── Load Mode ─────────────────────────────────────────
+function setMode(m) {
+  document.getElementById('tg-direct').classList.toggle('on', m==='direct');
+  document.getElementById('tg-file').classList.toggle('on', m==='file');
+  document.getElementById('file-zone-wrap').style.display = m==='file' ? '' : 'none';
+}
+
+function loadFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    document.getElementById('textInput').value = ev.target.result;
+    document.getElementById('file-ok').style.display = '';
+  };
+  r.readAsText(file);
+}
+
+// ── API Helper ────────────────────────────────────────
+async function api(endpoint, body, loaderId) {
+  if (loaderId) document.getElementById(loaderId).classList.add('show');
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return await res.json();
+  } finally {
+    if (loaderId) document.getElementById(loaderId).classList.remove('show');
+  }
+}
+
+// ── Load Text ─────────────────────────────────────────
+async function loadText() {
+  const txt = document.getElementById('textInput').value.trim();
+  if (!txt) return;
+
+  // Quick client-side count for header pills
+  const words   = txt.toLowerCase().replace(/[^\w\s]/g,' ').split(/\s+/).filter(Boolean);
+  const unique  = new Set(words).size;
+  const sents   = txt.split(/(?<=[.!?])\s+/).filter(Boolean).length;
+
+  currentText = txt;
+  undoStack   = [];
+  textLoaded  = true;
+
+  // Enable nav buttons
+  ['word-stats','char-stats','search','replace','autocomplete','predict','sentiment','keywords'].forEach(id => {
+    const b = document.getElementById('nb-' + id);
+    if (b) { b.classList.remove('off'); }
+  });
+
+  // Update header pills
+  document.getElementById('headerPills').style.display = '';
+  document.getElementById('pillWords').textContent  = words.length + ' words';
+  document.getElementById('pillUnique').textContent = unique + ' unique';
+  document.getElementById('pillSents').textContent  = sents + ' sentences';
+
+  const ok = document.getElementById('loadOk');
+  ok.textContent = `✅ Loaded ${words.length} words, ${unique} unique, ${sents} sentence(s).`;
+  ok.style.display = '';
+
+  show('word-stats');
+}
+
+// ── Word Stats ────────────────────────────────────────
+async function runWordStats() {
+  const topN = parseInt(document.getElementById('topN').value) || 10;
+  const d    = await api('/api/word-stats', { text: currentText, topN }, 'wsLoader');
+  const max  = d.top[0]?.[1] || 1;
+  const html = `
+    <div class="cards">
+      <div class="card"><span class="card-num">${d.total}</span><span>Total Words</span></div>
+      <div class="card"><span class="card-num">${d.unique}</span><span>Unique Words</span></div>
+    </div>
+    <h3 style="margin-bottom:12px;font-size:14px;color:var(--muted)">Top ${d.top.length} most frequent</h3>
+    <div class="bars">${d.top.map(([w,c])=>`
+      <div class="bar-row">
+        <span class="bar-word">${w}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${c/max*100}%"></div></div>
+        <span class="bar-cnt">${c}</span>
+      </div>`).join('')}
+    </div>`;
+  showResult('wsResult', html);
+}
+
+// ── Char Stats ────────────────────────────────────────
+async function runCharStats() {
+  const d = await api('/api/char-stats', { text: currentText }, 'csLoader');
+  const html = `
+    <div class="cards">
+      <div class="card"><span class="card-num">${d.total}</span><span>Total Characters</span></div>
+    </div>
+    <div class="char-grid">${d.top.map(([ch,cnt])=>`
+      <div class="char-cell">
+        <span class="char-lbl">${ch===' '?'·':escHtml(ch)}</span>
+        <span class="char-cnt">${cnt}</span>
+      </div>`).join('')}
+    </div>`;
+  showResult('csResult', html);
+}
+
+// ── Search ────────────────────────────────────────────
+async function runSearch() {
+  const q = document.getElementById('searchQ').value.trim();
+  if (!q) return;
+  const d = await api('/api/search', { text: currentText, query: q }, 'srLoader');
+  const html = `<p class="result-meta">${d.count} occurrence(s) of "<strong>${escHtml(q)}</strong>"</p>
+    ${d.count===0 ? '<p class="empty">Not found.</p>' : `
+    <div class="s-results">${d.results.map(r=>`
+      <div class="s-row">
+        <span class="badge">Sent ${r.sentence}</span>
+        <span class="badge">Word #${r.wordIndex}</span>
+        <span class="ctx">...${escHtml(r.context)}...</span>
+      </div>`).join('')}
+    </div>`}`;
+  showResult('srResult', html);
+}
+
+// ── Replace ───────────────────────────────────────────
+async function runReplace() {
+  const old = document.getElementById('replaceOld').value.trim();
+  const nw  = document.getElementById('replaceNew').value.trim();
+  if (!old || !nw) return;
+  const d = await api('/api/replace', { text: currentText, old, new: nw }, 'rpLoader');
+  if (d.count === 0) {
+    document.getElementById('rpOk').textContent = `"${old}" not found in text.`;
+    document.getElementById('rpOk').style.color = 'var(--red)';
+  } else {
+    undoStack.push(currentText);
+    currentText = d.newText;
+    document.getElementById('undoBtn').disabled = false;
+    document.getElementById('rpOk').textContent = `✅ Replaced ${d.count} occurrence(s) of "${old}" → "${nw}"`;
+    document.getElementById('rpOk').style.color = 'var(--green)';
+  }
+  document.getElementById('rpOk').style.display = '';
+}
+
+function runUndo() {
+  if (!undoStack.length) return;
+  currentText = undoStack.pop();
+  document.getElementById('undoBtn').disabled = undoStack.length === 0;
+  document.getElementById('rpOk').textContent = '↩️ Undo successful!';
+  document.getElementById('rpOk').style.display = '';
+}
+
+// ── Autocomplete ──────────────────────────────────────
+async function runAutocomplete() {
+  const prefix = document.getElementById('acPrefix').value.trim();
+  if (!prefix) { document.getElementById('acResult').style.display='none'; return; }
+  const d = await api('/api/autocomplete', { text: currentText, prefix });
+  if (!d.suggestions.length) {
+    showResult('acResult', `<p class="empty">No matches for "${escHtml(prefix)}"</p>`);
+    return;
+  }
+  const html = `<div class="chips">${d.suggestions.map(s=>`
+    <span class="chip">
+      <span class="chip-p">${escHtml(prefix)}</span>${escHtml(s.word.slice(prefix.length))}
+      <span class="chip-f">${s.freq}</span>
+    </span>`).join('')}
+  </div>`;
+  showResult('acResult', html);
+}
+
+// ── Predict ───────────────────────────────────────────
+async function runPredict() {
+  const word = document.getElementById('predictWord').value.trim();
+  if (!word) return;
+  const d = await api('/api/predict', { text: currentText, word }, 'prLoader');
+  if (!d.predictions.length) {
+    showResult('prResult', `<p class="empty">"${escHtml(word)}" not found in bigrams.</p>`);
+    return;
+  }
+  const html = `<p class="result-meta">After "<strong>${escHtml(word)}</strong>":</p>
+    <div class="preds">${d.predictions.map((p,i)=>`
+      <div class="pred-row">
+        <span class="pred-rank">#${i+1}</span>
+        <span class="pred-word">${escHtml(p.word)}</span>
+        <div class="prob-track"><div class="prob-fill" style="width:${p.prob}%"></div></div>
+        <span class="pred-pct">${p.prob}%</span>
+      </div>`).join('')}
+    </div>`;
+  showResult('prResult', html);
+}
+
+// ── Sentiment ─────────────────────────────────────────
+async function runSentiment() {
+  const sentence = document.getElementById('sentInput').value.trim();
+  if (!sentence) return;
+  const d = await api('/api/sentiment', { sentence }, 'stLoader');
+  const emoji = d.label==='POSITIVE'?'😊':d.label==='NEGATIVE'?'😞':'😐';
+  const html = `
+    <div class="verdict ${d.label.toLowerCase()}">
+      <span class="v-emoji">${emoji}</span>
+      <span class="v-label">${d.label}</span>
+    </div>
+    <div class="sent-scores">
+      <div class="sc p"><span>Positive signals</span><strong>${d.pos}</strong></div>
+      <div class="sc n"><span>Negative signals</span><strong>${d.neg}</strong></div>
+    </div>`;
+  showResult('stResult', html);
+}
+
+// ── Keywords ──────────────────────────────────────────
+async function runKeywords() {
+  const topN = parseInt(document.getElementById('kwTopN').value) || 10;
+  const d    = await api('/api/keywords', { text: currentText, topN }, 'kwLoader');
+  const max  = d.keywords[0]?.[1] || 1;
+  const html = `<div class="bars">${d.keywords.map(([w,c])=>`
+    <div class="bar-row">
+      <span class="bar-word">${escHtml(w)}</span>
+      <div class="bar-track"><div class="bar-fill g" style="width:${c/max*100}%"></div></div>
+      <span class="bar-cnt">${c}</span>
+    </div>`).join('')}
+  </div>`;
+  showResult('kwResult', html);
+}
+
+// ── Helpers ───────────────────────────────────────────
+function showResult(id, html) {
+  const el = document.getElementById(id);
+  el.innerHTML = html;
+  el.style.display = '';
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Enter key on search
+document.addEventListener('keydown', e => {
+  if (e.key==='Enter' && document.activeElement.id==='searchQ') runSearch();
+  if (e.key==='Enter' && document.activeElement.id==='predictWord') runPredict();
+});
+</script>
+</body>
+</html>
