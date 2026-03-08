@@ -15,7 +15,6 @@ class TextHelper:
         self.undo_stack = []
         self.boring_words = {"the", "is", "and", "in", "of", "to", "a", "an", "on", "for", "with", "that", "this", "it"}
         
-        # N-Grams
         self.pair_counts = defaultdict(lambda: defaultdict(int))
         self.trio_counts = defaultdict(lambda: defaultdict(int))
 
@@ -23,7 +22,6 @@ class TextHelper:
         self.raw_stuff = text
         self.sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
         
-        # تنظيف النص للكلمات
         clean = text.lower().translate(str.maketrans('', '', string.punctuation))
         self.word_list = clean.split()
         self._build_ngrams()
@@ -37,7 +35,6 @@ class TextHelper:
             key = f"{self.word_list[i]} {self.word_list[i+1]}"
             self.trio_counts[key][self.word_list[i+2]] += 1
 
-    # ميزة التدقيق الإملائي (Levenshtein Distance)
     def get_spelling_suggestions(self, word):
         word = word.lower()
         unique_words = set(self.word_list)
@@ -53,7 +50,6 @@ class TextHelper:
                 previous_row = current_row
             return previous_row[-1]
 
-        # اقتراح الكلمات التي مسافتها 1 أو 2 فقط
         suggestions = [w for w in unique_words if edit_distance(word, w) <= 2]
         return sorted(suggestions, key=lambda x: self.word_list.count(x), reverse=True)[:5]
 
@@ -64,11 +60,8 @@ def analyze():
     text = request.json.get("text", "")
     helper.process(text)
     
-    # إحصائيات الحروف
     char_counts = Counter(c for c in text if c not in string.whitespace)
-    # استخراج الكلمات المفتاحية (Keywords)
     keywords = [w for w, c in Counter(helper.word_list).most_common(20) if w not in helper.boring_words][:5]
-    # بيانات Word Cloud
     word_freq = dict(Counter(helper.word_list).most_common(50))
 
     return jsonify({
