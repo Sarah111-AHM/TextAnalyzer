@@ -1,227 +1,121 @@
-"""
-Smart Text Analyzer — Flask Web App
-Entry point for Vercel deployment.
-"""
-
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import string
 import re
-from collections import Counter, defaultdict
+from collections import defaultdict, Counter
 
 app = Flask(__name__)
+CORS(app)
 
-# ──────────────────────────────────────────────
-# DATA STRUCTURES & LOGIC (ported from terminal version)
-# ──────────────────────────────────────────────
-
-class TrieNode:
+class TextHelper:
     def __init__(self):
-        self.children: dict = {}
-        self.is_end: bool = False
+        self.raw_stuff = ""
+        self.word_list = []
+        self.sentences = []
+        self.undo_stack = []
+        self.boring_words = {"the", "is", "and", "in", "of", "to", "a", "an", "on", "for", "with", "that", "this", "it"}
+        
+        # N-Grams
+        self.pair_counts = defaultdict(lambda: defaultdict(int))
+        self.trio_counts = defaultdict(lambda: defaultdict(int))
 
-class Trie:
-    def __init__(self):
-        self.root = TrieNode()
+    def process(self, text):
+        self.raw_stuff = text
+        self.sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
+        
+        # تنظيف النص للكلمات
+        clean = text.lower().translate(str.maketrans('', '', string.punctuation))
+        self.word_list = clean.split()
+        self._build_ngrams()
 
-    def insert(self, word):
-        node = self.root
-        for ch in word:
-            node = node.children.setdefault(ch, TrieNode())
-        node.is_end = True
+    def _build_ngrams(self):
+        self.pair_counts.clear()
+        self.trio_counts.clear()
+        for i in range(len(self.word_list) - 1):
+            self.pair_counts[self.word_list[i]][self.word_list[i+1]] += 1
+        for i in range(len(self.word_list) - 2):
+            key = f"{self.word_list[i]} {self.word_list[i+1]}"
+            self.trio_counts[key][self.word_list[i+2]] += 1
 
-    def autocomplete(self, prefix, limit=8):
-        node = self.root
-        for ch in prefix:
-            if ch not in node.children:
-                return []
-            node = node.children[ch]
-        results = []
-        self._dfs(node, list(prefix), results, limit)
-        return results
+    # ميزة التدقيق الإملائي (Levenshtein Distance)
+    def get_spelling_suggestions(self, word):
+        word = word.lower()
+        unique_words = set(self.word_list)
+        
+        def edit_distance(s1, s2):
+            if len(s1) < len(s2): return edit_distance(s2, s1)
+            if not s2: return len(s1)
+            previous_row = range(len(s2) + 1)
+            for i, c1 in enumerate(s1):
+                current_row = [i + 1]
+                for j, c2 in enumerate(s2):
+                    current_row.append(min(previous_row[j+1]+1, current_row[j]+1, previous_row[j]+(c1!=c2)))
+                previous_row = current_row
+            return previous_row[-1]
 
-    def _dfs(self, node, path, results, limit):
-        if len(results) >= limit:
-            return
-        if node.is_end:
-            results.append("".join(path))
-        for ch, child in node.children.items():
-            path.append(ch)
-            self._dfs(child, path, results, limit)
-            path.pop()
+        # اقتراح الكلمات التي مسافتها 1 أو 2 فقط
+        suggestions = [w for w in unique_words if edit_distance(word, w) <= 2]
+        return sorted(suggestions, key=lambda x: self.word_list.count(x), reverse=True)[:5]
 
-STOP_WORDS = {
-    "the","a","an","and","or","but","in","on","at","to","for","of","with",
-    "by","from","is","was","are","were","be","been","being","have","has",
-    "had","do","does","did","will","would","could","should","may","might",
-    "this","that","these","those","i","you","he","she","it","we","they",
-    "me","him","her","us","them","my","your","his","its","our","their",
-    "what","which","who","when","where","how","if","then","than","so","as",
-    "up","out","about","into","not","no","very","just","also","more","some",
-    "any","all","each","both","few","own","same","s","t","re","ve","ll","d"
-}
+helper = TextHelper()
 
-POSITIVE_WORDS = {
-    "good","great","excellent","amazing","wonderful","fantastic","love","happy",
-    "joy","best","beautiful","awesome","positive","nice","superb","perfect",
-    "brilliant","outstanding","magnificent","splendid","delightful","glad",
-    "pleased","enjoy","fun","pleasant","remarkable","impressive","terrific",
-    "blessed","cheerful","grateful","excited","helpful","kind","strong","smart",
-}
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    text = request.json.get("text", "")
+    helper.process(text)
+    
+    # إحصائيات الحروف
+    char_counts = Counter(c for c in text if c not in string.whitespace)
+    # استخراج الكلمات المفتاحية (Keywords)
+    keywords = [w for w, c in Counter(helper.word_list).most_common(20) if w not in helper.boring_words][:5]
+    # بيانات Word Cloud
+    word_freq = dict(Counter(helper.word_list).most_common(50))
 
-NEGATIVE_WORDS = {
-    "bad","terrible","awful","horrible","hate","sad","worst","ugly","negative",
-    "poor","dreadful","disgusting","unpleasant","boring","failure","wrong",
-    "broken","useless","pathetic","stupid","weak","angry","frustrated","miserable",
-    "painful","frightening","disaster","problem","difficult","annoying","sorry",
-    "unfortunate","depressing","disappointing","horrific","cruel","harsh",
-}
-
-def preprocess(raw_text):
-    raw_sentences = re.split(r'(?<=[.!?])\s+', raw_text.strip())
-    raw_sentences = [s.strip() for s in raw_sentences if s.strip()]
-    sentences = []
-    for sent in raw_sentences:
-        cleaned = re.sub(r"[^\w\s']", " ", sent.lower())
-        cleaned = re.sub(r"\s+", " ", cleaned).strip()
-        w = cleaned.split()
-        if w:
-            sentences.append(w)
-    words = [w for s in sentences for w in s]
-    word_freq = dict(Counter(words))
-    trie = Trie()
-    for w in word_freq:
-        trie.insert(w)
-    bigrams = defaultdict(lambda: defaultdict(int))
-    for i in range(len(words) - 1):
-        bigrams[words[i]][words[i+1]] += 1
-    return {
-        "words": words,
-        "sentences": sentences,
-        "raw_sentences": raw_sentences,
-        "word_freq": word_freq,
-        "trie": trie,
-        "bigrams": {k: dict(v) for k, v in bigrams.items()}
-    }
-
-# ──────────────────────────────────────────────
-# API ROUTES
-# ──────────────────────────────────────────────
-
-@app.route("/api/word-stats", methods=["POST"])
-def word_stats():
-    data = request.json
-    state = preprocess(data["text"])
-    top_n = int(data.get("topN", 10))
-    top = sorted(state["word_freq"].items(), key=lambda x: x[1], reverse=True)[:top_n]
     return jsonify({
-        "total": len(state["words"]),
-        "unique": len(state["word_freq"]),
-        "top": top
+        "stats": {
+            "total_words": len(helper.word_list),
+            "total_chars": sum(char_counts.values()),
+            "unique_words": len(set(helper.word_list)),
+            "char_freq": dict(char_counts.most_common(10))
+        },
+        "keywords": keywords,
+        "word_cloud": word_freq
     })
 
-@app.route("/api/char-stats", methods=["POST"])
-def char_stats():
-    data = request.json
-    state = preprocess(data["text"])
-    flat = "".join(state["words"])
-    char_freq = Counter(flat)
-    return jsonify({
-        "total": len(flat),
-        "top": char_freq.most_common(20)
-    })
-
-@app.route("/api/search", methods=["POST"])
-def search():
-    data = request.json
-    state = preprocess(data["text"])
-    query = data["query"].lower().strip()
-    q_tokens = query.split()
+@app.route('/search', methods=['GET'])
+def search_phrase():
+    phrase = request.args.get("q", "").lower()
     results = []
-    for si, sent in enumerate(state["sentences"]):
-        for wi in range(len(sent) - len(q_tokens) + 1):
-            if sent[wi: wi + len(q_tokens)] == q_tokens:
-                ctx = " ".join(sent[max(0,wi-3): min(len(sent), wi+len(q_tokens)+3)])
-                results.append({"sentence": si+1, "wordIndex": wi+1, "context": ctx})
-    return jsonify({"count": len(results), "results": results})
+    for i, sent in enumerate(helper.sentences):
+        if phrase in sent.lower():
+            results.append({"line": i+1, "text": sent.strip()})
+    return jsonify({"matches": results})
 
-@app.route("/api/replace", methods=["POST"])
-def replace():
+@app.route('/swap', methods=['POST'])
+def swap():
     data = request.json
-    state = preprocess(data["text"])
-    old = data["old"].lower()
-    new = data["new"].lower()
-    count = state["words"].count(old)
-    new_text = re.sub(r'\b' + re.escape(old) + r'\b', new, data["text"], flags=re.IGNORECASE)
-    return jsonify({"count": count, "newText": new_text})
+    old_w, new_w = data.get("old"), data.get("new")
+    helper.undo_stack.append(helper.raw_stuff) # حفظ للـ Undo
+    helper.raw_stuff = re.sub(rf'\b{old_w}\b', new_w, helper.raw_stuff, flags=re.IGNORECASE)
+    helper.process(helper.raw_stuff)
+    return jsonify({"new_text": helper.raw_stuff})
 
-@app.route("/api/autocomplete", methods=["POST"])
-def autocomplete():
-    data = request.json
-    state = preprocess(data["text"])
-    prefix = data["prefix"].lower().strip()
-    suggestions = state["trie"].autocomplete(prefix, 10)
-    suggestions.sort(key=lambda w: state["word_freq"].get(w, 0), reverse=True)
-    result = [{"word": w, "freq": state["word_freq"].get(w, 0)} for w in suggestions]
-    return jsonify({"suggestions": result})
+@app.route('/undo', methods=['POST'])
+def undo():
+    if not helper.undo_stack:
+        return jsonify({"error": "Nothing to undo"}), 400
+    helper.raw_stuff = helper.undo_stack.pop()
+    helper.process(helper.raw_stuff)
+    return jsonify({"text": helper.raw_stuff})
 
-@app.route("/api/predict", methods=["POST"])
-def predict():
-    data = request.json
-    state = preprocess(data["text"])
-    word = data["word"].lower().strip()
-    following = state["bigrams"].get(word, {})
-    if not following:
-        return jsonify({"predictions": []})
-    total = sum(following.values())
-    top = sorted(following.items(), key=lambda x: x[1], reverse=True)[:8]
-    predictions = [{"word": w, "count": c, "prob": round(c/total*100, 1)} for w, c in top]
-    return jsonify({"predictions": predictions})
+@app.route('/spell', methods=['GET'])
+def spell_check():
+    word = request.args.get("w", "")
+    return jsonify({"suggestions": helper.get_spelling_suggestions(word)})
 
-@app.route("/api/sentiment", methods=["POST"])
-def sentiment():
-    data = request.json
-    sentence = data["sentence"]
-    excl_count = sentence.count("!")
-    tokens = re.sub(r"[^\w\s]", " ", sentence.lower()).split()
-    NEGATORS = {"not","never","no","neither","nor","hardly","barely"}
-    pos, neg, negation = 0, 0, False
-    for token in tokens:
-        if token in NEGATORS:
-            negation = True
-            continue
-        if token in POSITIVE_WORDS:
-            neg += 1 if negation else 0
-            pos += 0 if negation else 1
-        elif token in NEGATIVE_WORDS:
-            pos += 1 if negation else 0
-            neg += 0 if negation else 1
-        negation = False
-    if excl_count > 0:
-        if pos >= neg: pos += excl_count
-        else: neg += excl_count
-    label = "POSITIVE" if pos > neg else "NEGATIVE" if neg > pos else "NEUTRAL"
-    return jsonify({"pos": pos, "neg": neg, "label": label})
+@app.route('/predict-trigram', methods=['GET'])
+def predict_trigram():
+    q = request.args.get("q", "").lower()
+    return jsonify({"options": dict(helper.trio_counts.get(q, {}))})
 
-@app.route("/api/keywords", methods=["POST"])
-def keywords():
-    data = request.json
-    state = preprocess(data["text"])
-    top_n = int(data.get("topN", 10))
-    freq = {}
-    for w in state["words"]:
-        if w not in STOP_WORDS and len(w) > 1:
-            freq[w] = freq.get(w, 0) + 1
-    top = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:top_n]
-    return jsonify({"keywords": top})
-
-# ──────────────────────────────────────────────
-# FRONTEND (single-page HTML served by Flask)
-# ──────────────────────────────────────────────
-
-HTML = open("static/index.html").read()
-
-@app.route("/")
-def index():
-    return render_template_string(HTML)
-
-if __name__ == "__main__":
-    app.run(debug=True)
+app = app
