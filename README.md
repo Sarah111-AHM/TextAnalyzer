@@ -1,6 +1,6 @@
-# TextAnalyzer 🔥
+# TextAnalyzer 
 
-Hello Guys, We built this **Smart Text Analyzer** — basically a tool that lets you throw in any text (like an essay, article, or just random words) and it gives you all kinds of cool insights. It’s got both a terminal version and a web version (yup, even deployed it on Vercel ✨).
+Hello Guys, We built this **Smart Text Analyzer**  basically a tool that lets you throw in any text (like an essay, article, or just random words) and it gives you all kinds of cool insights. It’s got both a terminal version and a web version (yup, even deployed it on Vercel ✨).
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-blue?style=for-the-badge&logo=vercel)](https://text-analyzer-fb68.vercel.app/)
 
