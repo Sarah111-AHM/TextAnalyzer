@@ -3,35 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Professional Text Processor</title>
+    <title>Professional Text Processor (Fixed)</title>
     <style>
         :root { --primary: #2c3e50; --accent: #34495e; --border: #d1d8e0; --bg: #fdfdfd; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); margin: 0; padding: 40px 20px; color: var(--primary); }
         .wrapper { max-width: 1000px; margin: auto; }
         
-        /* Main Editor */
         .editor-section { margin-bottom: 30px; }
         textarea { width: 100%; height: 250px; padding: 20px; border: 2px solid var(--border); border-radius: 4px; font-size: 16px; line-height: 1.6; resize: vertical; outline: none; transition: border-color 0.2s; }
         textarea:focus { border-color: var(--primary); }
         
-        /* Toolbar */
         .toolbar { display: flex; gap: 10px; margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 15px; }
         button { background: white; border: 1px solid var(--primary); color: var(--primary); padding: 8px 16px; cursor: pointer; font-size: 14px; font-weight: 500; border-radius: 3px; }
         button:hover { background: var(--primary); color: white; }
         button.undo-btn { border-color: #7f8c8d; color: #7f8c8d; }
         button.undo-btn:hover { background: #7f8c8d; color: white; }
 
-        /* Dashboard Layout */
         .dashboard { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
         .panel { border: 1px solid var(--border); padding: 20px; border-radius: 4px; background: white; }
         .panel h3 { margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #95a5a6; border-bottom: 1px solid #f1f1f1; padding-bottom: 10px; }
         
-        /* Stats & Lists */
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
         .stat-item { font-size: 20px; font-weight: bold; }
         .stat-label { font-size: 12px; color: #7f8c8d; display: block; }
         
-        /* Quick Tools */
         .tool-row { margin-bottom: 20px; }
         input { width: calc(50% - 10px); padding: 8px; border: 1px solid var(--border); border-radius: 3px; margin-bottom: 10px; }
         .full-width { width: 100%; box-sizing: border-box; }
@@ -45,22 +40,21 @@
     <div class="toolbar">
         <button onclick="processAll()">Process Text</button>
         <button class="undo-btn" onclick="triggerUndo()">Undo Last Edit</button>
-        <button onclick="document.getElementById('mainInput').value=''">Clear All</button>
+        <button onclick="clearAll()">Clear All</button>
     </div>
 
     <div class="editor-section">
-        <textarea id="mainInput" placeholder="Start typing or paste your content here..."></textarea>
+        <textarea id="mainInput" placeholder="Start typing or paste your content here..." oninput="saveHistory()"></textarea>
     </div>
 
     <div class="dashboard">
-        <!-- Left Side: Analysis -->
         <div class="left-col">
             <div class="panel">
                 <h3>Text Summary</h3>
                 <div class="stats-grid" id="statsDisplay">
-                    <div><span class="stat-label">Total Words</span> <span class="stat-item">0</span></div>
-                    <div><span class="stat-label">Character Count</span> <span class="stat-item">0</span></div>
-                    <div><span class="stat-label">Unique Vocabulary</span> <span class="stat-item">0</span></div>
+                    <div><span class="stat-label">Total Words</span> <span id="wordCount" class="stat-item">0</span></div>
+                    <div><span class="stat-label">Character Count</span> <span id="charCount" class="stat-item">0</span></div>
+                    <div><span class="stat-label">Unique Vocabulary</span> <span id="uniqueCount" class="stat-item">0</span></div>
                 </div>
             </div>
             
@@ -70,7 +64,6 @@
             </div>
         </div>
 
-        <!-- Right Side: Interactive Tools -->
         <div class="right-col">
             <div class="panel">
                 <h3>Find & Replace</h3>
@@ -78,86 +71,75 @@
                 <input type="text" id="replaceWord" placeholder="Replace with..." class="full-width">
                 <button style="width:100%" onclick="executeSwap()">Update Text</button>
             </div>
-
-            <div class="panel" style="margin-top: 20px;">
-                <h3>Writing Assistance</h3>
-                <div class="tool-row">
-                    <label class="stat-label">Spell Check</label>
-                    <input type="text" id="spellIn" placeholder="Type a word..." class="full-width" oninput="runSpellCheck()">
-                    <div id="spellOut" class="suggestion-box"></div>
-                </div>
-                <div class="tool-row">
-                    <label class="stat-label">Predictive Typing (2-word context)</label>
-                    <input type="text" id="predictIn" placeholder="Enter two words..." class="full-width" oninput="runPrediction()">
-                    <div id="predictOut" class="suggestion-box"></div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
 
 <script>
-    // ربط الدوال بالـ API (نفس المنطق السابق مع تحسين المخرجات)
-    const BASE_URL = window.location.origin;
-
-    async function processAll() {
-        const text = document.getElementById('mainInput').value;
-        if(!text) return;
-        
-        const res = await fetch(`${BASE_URL}/analyze`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({text})
-        });
-        const data = await res.json();
-        
-        const stats = document.getElementById('statsDisplay').querySelectorAll('.stat-item');
-        stats[0].innerText = data.stats.total_words;
-        stats[1].innerText = data.stats.total_chars;
-        stats[2].innerText = data.stats.unique_words;
-        
-        document.getElementById('keywordsList').innerText = data.keywords.join(' • ');
+    // نظام "تاريخ التعديلات" للأندرو (Undo History)
+    let history = [""];
+    
+    function saveHistory() {
+        const currentText = document.getElementById('mainInput').value;
+        if (currentText !== history[history.length - 1]) {
+            history.push(currentText);
+            if (history.length > 20) history.shift(); // حفظ آخر 20 تعديل فقط
+        }
     }
 
-    async function executeSwap() {
+    function processAll() {
+        const text = document.getElementById('mainInput').value;
+        
+        // حساب الإحصائيات
+        const words = text.trim() ? text.trim().split(/\s+/) : [];
+        const chars = text.length;
+        const unique = new Set(words.map(w => w.toLowerCase())).size;
+        
+        // تحديث الواجهة
+        document.getElementById('wordCount').innerText = words.length;
+        document.getElementById('charCount').innerText = chars;
+        document.getElementById('uniqueCount').innerText = unique;
+                const counts = {};
+        words.forEach(w => { if(w.length > 3) counts[w] = (counts[w] || 0) + 1; });
+        const keywords = Object.keys(counts)
+            .sort((a, b) => counts[b] - counts[a])
+            .slice(0, 5);
+            
+        document.getElementById('keywordsList').innerText = keywords.length ? keywords.join(' • ') : "---";
+    }
+
+    function executeSwap() {
+        saveHistory();
+        const text = document.getElementById('mainInput').value;
         const oldW = document.getElementById('findWord').value;
         const newW = document.getElementById('replaceWord').value;
-        const res = await fetch(`${BASE_URL}/swap`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({old: oldW, new: newW})
-        });
-        const data = await res.json();
-        document.getElementById('mainInput').value = data.new_text;
+        
+        if(!oldW) return;
+        
+        const newText = text.split(oldW).join(newW);
+        document.getElementById('mainInput').value = newText;
         processAll();
     }
 
-    async function triggerUndo() {
-        const res = await fetch(`${BASE_URL}/undo`, { method: 'POST' });
-        const data = await res.json();
-        if(data.text) {
-            document.getElementById('mainInput').value = data.text;
+    function triggerUndo() {
+        if (history.length > 1) {
+            history.pop();
+            const previousText = history[history.length - 1];
+            document.getElementById('mainInput').value = previousText;
             processAll();
         }
     }
 
-    async function runSpellCheck() {
-        const w = document.getElementById('spellIn').value;
-        if(w.length < 3) return;
-        const res = await fetch(`${BASE_URL}/spell?w=${w}`);
-        const data = await res.json();
-        document.getElementById('spellOut').innerText = data.suggestions.length ? "Suggestions: " + data.suggestions.join(', ') : "";
-    }
-
-    async function runPrediction() {
-        const q = document.getElementById('predictIn').value;
-        if(q.split(' ').length < 2) return;
-        const res = await fetch(`${BASE_URL}/predict-trigram?q=${q}`);
-        const data = await res.json();
-        const options = Object.keys(data.options);
-        document.getElementById('predictOut').innerText = options.length ? "Next word: " + options.join(' / ') : "";
+    function clearAll() {
+        saveHistory();
+        document.getElementById('mainInput').value = '';
+        processAll();
     }
 </script>
+
+</body>
+</html>
+
 
 </body>
 </html>
